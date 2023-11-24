@@ -20,6 +20,9 @@ class TimeHelper:
             from .visualizer import visVispy
             resizable = videopath is None
             self.visualizer = visVispy.VisVispy(resizable=resizable)
+        elif vis == "webots":
+            from .visualizer import visWebots
+            self.visualizer = visWebots.VisWebots()
         elif vis == "null":
             from .visualizer import visNull
             self.visualizer = visNull.VisNull()

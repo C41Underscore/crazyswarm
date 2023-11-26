@@ -1,52 +1,63 @@
 import warnings
 
+import numpy as np
+
 import rospy
 
-from crazyswarm.msg import WebotsFullState
-
-
-# (self, dt, desired_vx, desired_vy, desired_yaw_rate, desired_altitude, actual_roll, actual_pitch, actual_yaw_rate,
-#           actual_altitude, actual_vx, actual_vy)
+from crazyswarm.msg import VelocityWorld
 
 
 class VisWebots:
 
     def __init__(self) -> None:
-        #  Items required to Publish:
-        #  dt
-        #  desired_vx
-        #  desired_vy
-        #  desired_yaw_rate
-        #  desired_altitude
-        #  actual_roll
-        #  actual_pitch 
-        #  actual_yaw_rate
-        #  actual_altitude
-        #  actual_vx
-        #  actual_vy
         rospy.init_node("CrazyWebotVisualiser", anonymous=False)
-        self.init = True
-        self.cmdFullStatePublishers = rospy.Publisher("/webots_full_state", WebotsFullState, queue_size=1)
-        self.drone_positions = None
-        self.cmdFullStateMsg = WebotsFullState()
+        self.cmdFullStatePublishers = rospy.Publisher("/webots_full_state", VelocityWorld, queue_size=1)
+        self.cmdFullStateMsg = VelocityWorld()
         self.cmdFullStateMsg.header.seq = 0
+        self.rate = rospy.Rate(10)
+        self.times_called = 0
+
+        self.init = True
+        self.drone_positions = None
+        self.prev_time = None
 
     def __del__(self):
         self.cmdFullStatePublishers.unregister()
+        print(self.times_called)
 
-    def update(self, t, crazyflies):
-        if self.init:
-            #  initialise all information on first update
+    def __vis_init(self, crazyflies):
+        #  initialise all information on first update
+            self.drone_positions = {drone: drone.position() for drone in crazyflies}
+            self.prev_time = rospy.Time.now().nsecs
             self.init = False
             print("Webots Initialisation Complete.")
-        rate = rospy.Rate(5)
+
+    def __compute_velo(self, t, drone):
+        pos = drone.position()
+        dt = np.abs((t - self.prev_time))
+        vel = (pos - self.drone_positions[drone])/dt
+        return vel
+
+    def update(self, t, crazyflies):
+        self.times_called += 1
+        if self.init:
+            self.__vis_init(crazyflies)
+
         for drone in crazyflies:
             self.cmdFullStateMsg.header.stamp = rospy.Time.now()
             self.cmdFullStateMsg.header.seq += 1
-            print(self.cmdFullStateMsg.header.stamp)
-            print(self.cmdFullStateMsg.header.seq)
+
+            vel = self.__compute_velo(t, drone)
+            print(vel)
+
+            self.cmdFullStateMsg.vel.x = vel[0]
+            self.cmdFullStateMsg.vel.y = vel[1]
+            self.cmdFullStateMsg.vel.z = vel[2]
             self.cmdFullStatePublishers.publish(self.cmdFullStateMsg)
-            rate.sleep()
+
+            self.drone_positions = {drone: drone.position() for drone in crazyflies}
+            self.prev_time = t
+            self.rate.sleep()
 
     def render(self):
         warnings.warn("Rendering video not supported in VisWebots yet.")
